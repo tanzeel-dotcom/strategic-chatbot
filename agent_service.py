@@ -11,6 +11,15 @@ load_dotenv()
 
 CHROMA_PATH = r"chroma_db"
 
+def normalize_url(url: str) -> str:
+    """Normalize a URL for consistent matching (removes trailing slash and www.)."""
+    url = url.strip()
+    if url.endswith("/"):
+        url = url[:-1]
+    url = url.replace("https://www.", "https://")
+    url = url.replace("http://www.", "http://")
+    return url
+
 # Initiate the models
 embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 llm = ChatOpenAI(temperature=0.5, model='gpt-4o-mini')
@@ -52,9 +61,10 @@ def ingest_website(url: str, max_depth: int = 2):
         if not documents:
             return {"status": "error", "message": f"No content found at {url}"}
             
+        normalized_url = normalize_url(url)
         # Add a common "website_url" metadata attribute for filtering
         for doc in documents:
-            doc.metadata["website_url"] = url
+            doc.metadata["website_url"] = normalized_url
             
         # Split into chunks
         text_splitter = RecursiveCharacterTextSplitter(
@@ -76,10 +86,11 @@ def stream_chat_response(url: str, message: str, history: list):
     Retrieves context for a given website and streams the LLM response.
     """
     # Create a retriever that filters specifically for the website url
+    normalized_url = normalize_url(url)
     retriever = vector_store.as_retriever(
         search_kwargs={
             'k': 5,
-            'filter': {"website_url": url}
+            'filter': {"website_url": normalized_url}
         }
     )
     
