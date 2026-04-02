@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS Landing Page - Test Chatbot</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #e2e8f0; color: #333; }
+        .hero { background: #3b82f6; color: white; padding: 100px 20px; text-align: center; }
+        .hero h1 { font-size: 3rem; margin: 0; }
+        .hero p { font-size: 1.25rem; margin-top: 20px; }
+        .content { max-width: 800px; margin: 40px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Welcome to Amazing SaaS</h1>
+        <p>The ultimate product to scale your business.</p>
+    </div>
+    <div class="content">
+        <h2>About Us</h2>
+        <p>We provide amazing software for your needs. Check out our chatbot in the bottom right corner!</p>
+        <p>If you ask the bot about "Amazing SaaS," it should know based on this website context (if ingested).</p>
+    </div>
+
+    <!-- Embed the Support Agent Widget -->
+    <!-- Assuming you run FastAPI via uvicorn main:app --reload locally on port 8000 -->
+    <script src="http://localhost:8000/widget.js"></script>
+</body>
+</html>
