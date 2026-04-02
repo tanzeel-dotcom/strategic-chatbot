@@ -12,6 +12,14 @@ load_dotenv()
 
 CHROMA_PATH = r"chroma_db"
 
+# Render instances can be small (e.g., 512MB). Website ingestion is the spikiest
+# memory path, so we hard-cap how much we crawl/chunk per request.
+MAX_PAGES_PER_INGEST = int(os.getenv("MAX_PAGES_PER_INGEST", "40"))
+MAX_PAGE_CHARS = int(os.getenv("MAX_PAGE_CHARS", "25000"))          # per page (post-extraction)
+MAX_TOTAL_CHARS = int(os.getenv("MAX_TOTAL_CHARS", "400000"))       # across all pages
+MAX_CHUNKS_PER_INGEST = int(os.getenv("MAX_CHUNKS_PER_INGEST", "400"))
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "48"))
+
 def normalize_url(url: str) -> str:
     """Normalize a URL for consistent matching (removes trailing slash and www.)."""
     url = url.strip()
@@ -82,6 +90,45 @@ def extract_text_from_html(html: str) -> str:
     text = '\n'.join(chunk for chunk in chunks if chunk)
     return text
 
+def _iter_loader_docs(loader: RecursiveUrlLoader, *, max_pages: int) -> list:
+    """
+    Use lazy loading to avoid materializing an entire crawl in memory.
+    Stops after `max_pages` documents.
+    """
+    out = []
+    for doc in loader.lazy_load():
+        out.append(doc)
+        if len(out) >= max_pages:
+            break
+    return out
+
+def _safe_trim_documents(documents: list) -> list:
+    """Trim overly-large pages to avoid memory blowups."""
+    total = 0
+    trimmed = []
+    for doc in documents:
+        if not getattr(doc, "page_content", ""):
+            continue
+        content = doc.page_content.strip()
+        if not content:
+            continue
+        if len(content) > MAX_PAGE_CHARS:
+            content = content[:MAX_PAGE_CHARS]
+            doc.page_content = content
+        if total + len(content) > MAX_TOTAL_CHARS:
+            break
+        total += len(content)
+        trimmed.append(doc)
+    return trimmed
+
+def _delete_existing_for_website(website_url: str) -> None:
+    """Prevent unbounded DB growth for the same website."""
+    try:
+        vector_store._collection.delete(where={"website_url": website_url})
+    except Exception:
+        # If delete-by-filter isn't supported in the current Chroma setup, skip.
+        pass
+
 def ingest_website(url: str, max_depth: int = 2):
     """
     Crawls a website starting at the given URL up to max_depth.
@@ -109,7 +156,7 @@ def ingest_website(url: str, max_depth: int = 2):
                 headers=default_headers,
                 check_response_status=False,
             )
-            documents = loader.load()
+            documents = _iter_loader_docs(loader, max_pages=MAX_PAGES_PER_INGEST)
             if documents:
                 break
 
@@ -126,6 +173,10 @@ def ingest_website(url: str, max_depth: int = 2):
             seen_sources.add(source)
             unique_documents.append(doc)
         documents = unique_documents
+        documents = _safe_trim_documents(documents)
+
+        if not documents:
+            return {"status": "error", "message": f"No usable text content found at {url}"}
 
         # Add a common "website_url" metadata attribute for filtering.
         # We intentionally store the *normalized* input URL so widget requests match.
@@ -138,14 +189,26 @@ def ingest_website(url: str, max_depth: int = 2):
             chunk_overlap=150,
         )
         chunks = text_splitter.split_documents(documents)
+        if len(chunks) > MAX_CHUNKS_PER_INGEST:
+            chunks = chunks[:MAX_CHUNKS_PER_INGEST]
         
-        # Add to vector store
-        uuids = [str(uuid4()) for _ in range(len(chunks))]
-        vector_store.add_documents(documents=chunks, ids=uuids)
+        # Replace previous ingestion for this site to control memory/disk growth.
+        _delete_existing_for_website(normalized_url)
+
+        # Add to vector store in batches to avoid big in-memory embedding calls.
+        added = 0
+        for i in range(0, len(chunks), EMBED_BATCH_SIZE):
+            batch = chunks[i : i + EMBED_BATCH_SIZE]
+            uuids = [str(uuid4()) for _ in range(len(batch))]
+            vector_store.add_documents(documents=batch, ids=uuids)
+            added += len(batch)
         
         return {
             "status": "success",
-            "message": f"Successfully added {len(chunks)} chunks from {url} (normalized: {normalized_url})",
+            "message": (
+                f"Successfully added {added} chunks from {url} "
+                f"(normalized: {normalized_url}, pages: {len(documents)})"
+            ),
         }
     except Exception as e:
         return {"status": "error", "message": f"{type(e).__name__}: {e}"}
