@@ -1,7 +1,12 @@
 (function() {
+    // Prevent double initialization if script is included twice
+    if (window.AntiGravityChatbotInitialized) {
+        console.log("AntiGravity Chatbot is already initialized. Skipping duplicate injection.");
+        return;
+    }
+    window.AntiGravityChatbotInitialized = true;
+
     // Basic Configuration
-    // In production, BASE_URL should be the full domain of your FastAPI server, e.g., 'https://your-chatbot-api.com'
-    // For local testing, we auto-detect it based on where the script was loaded from, or default to localhost.
     const scripts = document.getElementsByTagName('script');
     let srcUrl = '';
     for (let i = 0; i < scripts.length; i++) {
@@ -11,8 +16,6 @@
         }
     }
     const BASE_URL = srcUrl ? new URL(srcUrl).origin : 'http://localhost:8000';
-    
-    // Determine the current website URL
     const WEBSITE_URL = window.location.origin;
 
     // Inject CSS
@@ -21,10 +24,8 @@
     link.href = `${BASE_URL}/style.css`;
     document.head.appendChild(link);
 
-    // Global History
     let chatHistory = [];
 
-    // Create Base HTML Structure
     const widgetHTML = `
         <div id="antigravity-chat-widget">
             <div id="ag-chat-window">
@@ -66,12 +67,10 @@
         </div>
     `;
 
-    // Append to body
     const widgetContainer = document.createElement('div');
     widgetContainer.innerHTML = widgetHTML;
     document.body.appendChild(widgetContainer);
 
-    // Elements
     const bubble = document.getElementById('ag-chat-bubble');
     const windowEl = document.getElementById('ag-chat-window');
     const closeBtn = document.getElementById('ag-close-button');
@@ -80,7 +79,6 @@
     const messagesEl = document.getElementById('ag-chat-messages');
     const typingIndicator = document.getElementById('ag-typing-indicator');
 
-    // Toggle Window state
     bubble.addEventListener('click', () => {
         windowEl.classList.toggle('ag-open');
         if (windowEl.classList.contains('ag-open')) {
@@ -94,30 +92,24 @@
         bubble.style.transform = 'scale(1)';
     });
 
-    // Send Message
     async function sendMessage() {
         const text = inputEl.value.trim();
         if (!text) return;
 
-        // User message UI
         appendMessage('user', text);
         inputEl.value = '';
         
-        // Show typing
         typingIndicator.classList.add('active');
-        messagesEl.appendChild(typingIndicator); // move to bottom
+        messagesEl.appendChild(typingIndicator); 
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
         try {
-            // Setup an empty bot message we will continually update via stream
             const botMessageDiv = document.createElement('div');
             botMessageDiv.className = 'ag-message bot';
-            // Placeholder for stream
             botMessageDiv.innerHTML = '<p></p>';
             messagesEl.appendChild(botMessageDiv);
             const contentP = botMessageDiv.querySelector('p');
             
-            // Fetch streaming response
             const response = await fetch(`${BASE_URL}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -128,10 +120,7 @@
                 })
             });
 
-            if (!response.ok) {
-                throw new Error('API Error');
-            }
-
+            if (!response.ok) throw new Error('API Error');
             typingIndicator.classList.remove('active');
 
             const reader = response.body.getReader();
@@ -142,16 +131,11 @@
                 const { value, done } = await reader.read();
                 if (done) break;
                 
-                const chunk = decoder.decode(value, { stream: true });
-                fullResponse += chunk;
-                // Add basic Markdown formatting on the fly if needed
-                // For a robust implementation, include a library like marked.js
-                // Here we simply replace double newlines with <p> tags
+                fullResponse += decoder.decode(value, { stream: true });
                 contentP.innerHTML = fullResponse.split('\\n\\n').join('</p><p>');
                 messagesEl.scrollTop = messagesEl.scrollHeight;
             }
 
-            // Update History
             chatHistory.push({ role: 'user', content: text });
             chatHistory.push({ role: 'assistant', content: fullResponse });
 
@@ -170,12 +154,9 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // Event Listeners for Input
     sendBtn.addEventListener('click', sendMessage);
     inputEl.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
+        if (e.key === 'Enter') sendMessage();
     });
 
 })();
