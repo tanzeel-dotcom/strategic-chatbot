@@ -9,15 +9,20 @@
     // Basic Configuration
     const scripts = document.getElementsByTagName('script');
     let srcUrl = '';
+    let configuredWebsiteUrl = null;
     for (let i = 0; i < scripts.length; i++) {
         if (scripts[i].src.includes('widget.js')) {
             srcUrl = scripts[i].src;
+            configuredWebsiteUrl = scripts[i].getAttribute('data-website-url');
             break;
         }
     }
     const BASE_URL = srcUrl ? new URL(srcUrl).origin : 'http://localhost:8000';
-    const WEBSITE_URL = window.location.origin;
-
+    
+    // Determine the website URL to send to the backend
+    // Universal: Auto-detect website URL, fallback to configured if provided
+    let WEBSITE_URL = window.location.origin;
+    
     // Inject CSS
     const link = document.createElement('link');
     link.rel = 'stylesheet';
