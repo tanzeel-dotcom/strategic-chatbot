@@ -31,7 +31,7 @@ with gr.Blocks(title="Admin Dashboard - Website Agent") as demo:
             status_output = gr.Textbox(label="Status", interactive=False, lines=4)
         
         with gr.Column(scale=1):
-            gr.Markdown("### 🧑‍💻 How to Install on Website")
+            gr.Markdown("###  How to Install on Website")
             gr.Code(
                 value=f'<!-- Paste this right before the closing </body> tag -->\n<script src="{PUBLIC_BASE_URL}/widget.js"></script>',
                 language="html",
