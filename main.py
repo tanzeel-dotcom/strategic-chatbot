@@ -28,6 +28,14 @@ class IngestRequest(BaseModel):
     url: str
     max_depth: Optional[int] = 2
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "website-support-agent"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     """
@@ -39,12 +47,15 @@ async def chat_endpoint(request: ChatRequest):
 
     # Generator function for streaming response
     def generate():
-        for chunk in stream_chat_response(
-            url=request.website_url,
-            message=request.message,
-            history=request.history
-        ):
-            yield chunk
+        try:
+            for chunk in stream_chat_response(
+                url=request.website_url,
+                message=request.message,
+                history=request.history
+            ):
+                yield chunk
+        except Exception as exc:
+            yield f"❌ Chat service error: {type(exc).__name__}: {exc}"
 
     return StreamingResponse(generate(), media_type="text/plain")
 
@@ -87,4 +98,6 @@ async def get_style():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", "8000"))
+    reload = os.getenv("RELOAD", "false").lower() == "true"
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)

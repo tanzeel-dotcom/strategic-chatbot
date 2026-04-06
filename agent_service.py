@@ -72,15 +72,21 @@ _embeddings_model = None
 _llm = None
 _vector_store = None
 
+def _ensure_openai_key() -> None:
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("Missing OPENAI_API_KEY. Set it in Railway Variables.")
+
 def get_embeddings_model():
     global _embeddings_model
     if _embeddings_model is None:
+        _ensure_openai_key()
         _embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
     return _embeddings_model
 
 def get_llm():
     global _llm
     if _llm is None:
+        _ensure_openai_key()
         _llm = ChatOpenAI(temperature=0.5, model='gpt-4o-mini')
     return _llm
 
@@ -234,33 +240,34 @@ def stream_chat_response(url: str, message: str, history: list):
     Retrieves context for a given website and streams the LLM response.
     Includes auto-ingestion if no data exists for the website.
     """
-    # Create a retriever that filters specifically for the website url
-    normalized_url = normalize_url(url)
-    retriever = get_vector_store().as_retriever(
-        search_kwargs={
-            'k': 5,
-            'filter': {"website_url": normalized_url}
-        }
-    )
-    
-    docs = retriever.invoke(message)
-    knowledge = "".join((doc.page_content + "\n\n") for doc in docs)
-
-    if not knowledge.strip():
-        # Auto-ingest if no data exists for this website
-        yield "🔍 Setting up your knowledge base... This will take a moment."
+    try:
+        # Create a retriever that filters specifically for the website url
+        normalized_url = normalize_url(url)
+        retriever = get_vector_store().as_retriever(
+            search_kwargs={
+                'k': 5,
+                'filter': {"website_url": normalized_url}
+            }
+        )
         
-        # Trigger ingestion in the background
-        ingest_result = ingest_website(url, max_depth=2)
-        
-        if ingest_result["status"] == "success":
-            yield f"✅ Knowledge base ready! {ingest_result['message']}\n\nPlease ask your question again."
-            return
-        else:
-            yield f"❌ Couldn't set up knowledge base: {ingest_result['message']}\n\nPlease try again later or contact support."
-            return
+        docs = retriever.invoke(message)
+        knowledge = "".join((doc.page_content + "\n\n") for doc in docs)
 
-    rag_prompt = f"""
+        if not knowledge.strip():
+            # Auto-ingest if no data exists for this website
+            yield "🔍 Setting up your knowledge base... This will take a moment."
+            
+            # Trigger ingestion in the background
+            ingest_result = ingest_website(url, max_depth=2)
+            
+            if ingest_result["status"] == "success":
+                yield f"✅ Knowledge base ready! {ingest_result['message']}\n\nPlease ask your question again."
+                return
+            else:
+                yield f"❌ Couldn't set up knowledge base: {ingest_result['message']}\n\nPlease try again later or contact support."
+                return
+
+        rag_prompt = f"""
 You are a helpful customer support agent for the website: {url}.
 Answer the user's questions based strictly on the provided knowledge.
 Do not use your internal knowledge, but solely the information in the "The knowledge" section.
@@ -275,6 +282,8 @@ Conversation history: {history}
 The knowledge: {knowledge}
 """
 
-    # We use a generator to yield content for the StreamingResponse
-    for response in get_llm().stream(rag_prompt):
-        yield response.content
+        # We use a generator to yield content for the StreamingResponse
+        for response in get_llm().stream(rag_prompt):
+            yield response.content
+    except Exception as e:
+        yield f"❌ Unable to answer right now: {type(e).__name__}: {e}"

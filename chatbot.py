@@ -1,6 +1,9 @@
 import gradio as gr
 from agent_service import ingest_website
 import time
+import os
+
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://<your-railway-domain>.up.railway.app")
 
 def process_url(url, depth):
     if not url:
@@ -30,11 +33,11 @@ with gr.Blocks(title="Admin Dashboard - Website Agent") as demo:
         with gr.Column(scale=1):
             gr.Markdown("### 🧑‍💻 How to Install on Website")
             gr.Code(
-                value='<!-- Paste this right before the closing </body> tag -->\n<script src="http://localhost:8000/widget.js"></script>',
+                value=f'<!-- Paste this right before the closing </body> tag -->\n<script src="{PUBLIC_BASE_URL}/widget.js"></script>',
                 language="html",
                 interactive=False
             )
-            gr.Markdown("> **Note:** Change `http://localhost:8000` to your actual server domain in production.")
+            gr.Markdown("> **Note:** Set `PUBLIC_BASE_URL` in Railway Variables to your public app URL.")
 
     submit_btn.click(
         fn=process_url,

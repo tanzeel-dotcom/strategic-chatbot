@@ -24,7 +24,17 @@
     </div>
 
     <!-- Embed the Support Agent Widget -->
-    <!-- Assuming you run FastAPI via uvicorn main:app --reload locally on port 8000 -->
-    <script src="http://localhost:8000/widget.js"></script>
+    <!-- Optional override before this block: window.CHATBOT_BASE_URL = "https://your-app.up.railway.app"; -->
+    <script>
+        (function () {
+            var defaultBase = window.location.hostname === "localhost"
+                ? "http://localhost:8000"
+                : window.location.origin;
+            var baseUrl = window.CHATBOT_BASE_URL || defaultBase;
+            var script = document.createElement("script");
+            script.src = baseUrl.replace(/\/$/, "") + "/widget.js";
+            document.body.appendChild(script);
+        })();
+    </script>
 </body>
 </html>
